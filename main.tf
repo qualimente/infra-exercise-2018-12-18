@@ -1,15 +1,26 @@
 variable "name" {
-  type    = "string"
+  type = "string"
 }
 
 variable "vpc_id" {
-  type = "string"
+  type    = "string"
   default = "vpc-58a29221"
 }
 
 variable "region" {
   default = "us-east-1"
-  type = "string"
+  type    = "string"
+}
+
+locals {
+  base_tags = {
+    Environment = "training"
+    Owner       = "${var.name}"
+  }
+
+  asg_instance_tags = "${merge(local.base_tags
+                             , map("WorkloadType", "CuteButNamelessCow")
+                             )}"
 }
 
 // Resolve existing network resources - START
@@ -23,7 +34,6 @@ data "aws_subnet_ids" "default_vpc" {
 }
 
 // Resolve existing network resources - END
-
 
 // Create Firewall Rules to Permit Access - START
 
@@ -45,14 +55,6 @@ resource "aws_security_group" "public_web" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-resource "aws_security_group_rule" "public_web_ingress_4433" {
-  from_port = 4433
-  protocol = "tcp"
-  security_group_id = "${aws_security_group.public_web.id}"
-  to_port = 443
-  type = "ingress"
 }
 
 resource "aws_security_group" "public_ssh" {
@@ -79,6 +81,7 @@ resource "aws_security_group" "internal_web" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["${data.aws_vpc.default_vpc.cidr_block}"]
+
     #cidr_blocks = ["172.31.0.0/16"]
   }
 }
@@ -98,3 +101,246 @@ resource "aws_security_group" "outbound" {
 }
 
 // Create Firewall Rules to Permit Access - END
+
+// Create an EC2 instance - START
+
+data "aws_ami" "amazon_ecs_linux" {
+  most_recent = true
+
+  filter {
+    name = "name"
+
+    values = [
+      "amzn-ami-*.i-amazon-ecs-optimized",
+    ]
+  }
+
+  filter {
+    name = "owner-alias"
+
+    values = [
+      "amazon",
+    ]
+  }
+}
+
+locals {
+  exercise_app_name = "exercise-${var.name}"
+}
+
+resource "aws_key_pair" "exercise" {
+  key_name   = "${local.exercise_app_name}"
+  public_key = "${file("exercise.id_rsa.pub")}"
+}
+
+variable "availability_zones" {
+  description = "List of availability zones to use"
+  type        = "list"
+
+  default = [
+    "us-east-1a",
+    "us-east-1b",
+    "us-east-1c",
+  ]
+}
+
+variable "db_pass" {
+  default     = "mypass27"
+  description = "Password to use for DB"
+}
+
+data "template_file" "init" {
+  template = "${file("${path.module}/nginx.yml.tpl")}"
+
+  //uncomment serviceapi cloud-init once db instantiated
+  //template = "${file("${path.module}/init.yml.tpl")}"
+
+  //uncomment db module address output once db instantiated
+  vars {
+    //postgres_address = "${module.db.this_db_instance_address}"  //postgres_password = "${var.db_pass}"
+  }
+}
+
+resource "aws_instance" "app" {
+  count         = "2"
+  instance_type = "t3.micro"
+
+  ami = "${data.aws_ami.amazon_ecs_linux.id}"
+
+  user_data = "${data.template_file.init.rendered}"
+
+  # The name of our SSH keypair we created above.
+  key_name                    = "${aws_key_pair.exercise.id}"
+  associate_public_ip_address = "true"
+
+  vpc_security_group_ids = [
+    "${aws_security_group.public_ssh.id}",
+    "${aws_security_group.internal_web.id}",
+    "${aws_security_group.outbound.id}",
+  ]
+
+  # We're going to launch into the same subnet as our ELB. In a production
+  # environment it's more common to have a separate private subnet for
+  # backend instances.
+  subnet_id = "${element(data.aws_subnet_ids.default_vpc.ids, count.index)}"
+
+  tags = "${merge(local.base_tags
+                  , map("Name", "${local.exercise_app_name}-${count.index}")
+                  , map("WorkloadType", "Pet")
+                  )}"
+
+  //
+  //  tags {
+  //    Name = "${local.exercise_app_name}-${count.index}"
+  //    Environment = "training"
+  //    Owner = "${var.name}"
+  //    WorkloadType = "Pet"
+  //  }
+}
+
+// Create an EC2 instance - END
+
+// Create an Auto Scaling Group to run the application - START
+
+module "asg" {
+  //use a module for the official Terraform Registry
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "2.9.0"
+
+  name = "${local.exercise_app_name}"
+
+  instance_type = "t3.micro"
+
+  image_id = "${data.aws_ami.amazon_ecs_linux.id}"
+
+  user_data = "${data.template_file.init.rendered}"
+  key_name  = "${aws_key_pair.exercise.id}"
+
+  # Launch configuration
+  #
+  # launch_configuration = "my-existing-launch-configuration" # Use the existing launch configuration
+  # create_lc = false # disables creation of launch configuration
+  lc_name = "${local.exercise_app_name}"
+
+  security_groups = [
+    "${aws_security_group.public_ssh.id}",
+    "${aws_security_group.internal_web.id}",
+    "${aws_security_group.outbound.id}",
+  ]
+
+  load_balancers = ["${aws_elb.web.id}"]
+
+  root_block_device = [
+    {
+      volume_size           = "20"
+      volume_type           = "gp2"
+      delete_on_termination = true
+    },
+  ]
+
+  # Auto scaling group
+  asg_name                  = "${local.exercise_app_name}"
+  vpc_zone_identifier       = ["${data.aws_subnet_ids.default_vpc.ids}"]
+  health_check_type         = "EC2"
+  min_size                  = 1
+  desired_capacity          = 1
+  max_size                  = 2
+  wait_for_capacity_timeout = 0
+
+  //Uncomment to enable use of spot instances
+  //Your instance may be terminated, but it'll be cheaper until it does
+  //spot_price = "0.0104"
+
+  //tags_as_map = "${local.asg_instance_tags}"
+  tags = [
+    {
+      key                 = "Environment"
+      value               = "training"
+      propagate_at_launch = true
+    },
+    {
+      key                 = "Owner"
+      value               = "${var.name}"
+      propagate_at_launch = true
+    },
+    {
+      key                 = "WorkloadType"
+      value               = "CuteButNamelessCow"
+      propagate_at_launch = true
+    },
+  ]
+
+  // Equivalent to:
+  //
+  //  tags = [
+  //    {
+  //      key                 = "Environment"
+  //      value               = "training"
+  //      propagate_at_launch = true
+  //    },
+  //  ... snip ...
+  //  ]
+}
+
+// Create an Auto Scaling Group to run the application - END
+
+// Create an ELB - START
+
+resource "aws_elb" "web" {
+  name = "${local.exercise_app_name}"
+
+  subnets = ["${data.aws_subnet_ids.default_vpc.ids}"]
+
+  security_groups = [
+    "${aws_security_group.public_web.id}",
+    "${aws_security_group.outbound.id}",
+  ]
+
+  //instances = ["${aws_instance.app.id}"]
+
+  listener {
+    lb_port           = 80
+    lb_protocol       = "http"
+    instance_port     = 80
+    instance_protocol = "http"
+  }
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    target              = "HTTP:80/"
+    interval            = 15
+  }
+  tags = "${local.base_tags}"
+}
+
+// Attach Pet EC2 instance to ELB using an attachment resource to avoid
+// removal of ASG's instances when running terraform apply for 2nd/3rd/etc set of changes
+resource "aws_elb_attachment" "app_instance" {
+  count = "${length(aws_instance.app.*.id)}"
+
+  elb      = "${aws_elb.web.id}"
+  instance = "${element(aws_instance.app.*.id, count.index)}"
+}
+
+// Create an ELB - END
+
+// Output Location of ELB and App Server - START
+
+output "lb.web.dns_name" {
+value = "${aws_elb.web.dns_name}"
+}
+
+output "app.web.dns_name" {
+  value = "${element(aws_instance.app.*.public_dns, 0)}"
+}
+
+output "app.asg.name" {
+value = "${module.asg.this_autoscaling_group_name}"
+}
+
+output "app.asg.launch_configuration_name" {
+value = "${module.asg.this_launch_configuration_name}"
+}
+
+// Output Location of ELB and App Server - END
