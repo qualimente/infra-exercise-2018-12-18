@@ -251,24 +251,24 @@ module "asg" {
   //Your instance may be terminated, but it'll be cheaper until it does
   //spot_price = "0.0104"
 
-  //tags_as_map = "${local.asg_instance_tags}"
-  tags = [
-    {
-      key                 = "Environment"
-      value               = "training"
-      propagate_at_launch = true
-    },
-    {
-      key                 = "Owner"
-      value               = "${var.name}"
-      propagate_at_launch = true
-    },
-    {
-      key                 = "WorkloadType"
-      value               = "CuteButNamelessCow"
-      propagate_at_launch = true
-    },
-  ]
+  tags_as_map = "${local.asg_instance_tags}"
+//  tags = [
+//    {
+//      key                 = "Environment"
+//      value               = "training"
+//      propagate_at_launch = true
+//    },
+//    {
+//      key                 = "Owner"
+//      value               = "${var.name}"
+//      propagate_at_launch = true
+//    },
+//    {
+//      key                 = "WorkloadType"
+//      value               = "CuteButNamelessCow"
+//      propagate_at_launch = true
+//    },
+//  ]
 
   // Equivalent to:
   //
@@ -321,6 +321,7 @@ resource "aws_elb_attachment" "app_instance" {
 
   elb      = "${aws_elb.web.id}"
   instance = "${element(aws_instance.app.*.id, count.index)}"
+
 }
 
 // Create an ELB - END
