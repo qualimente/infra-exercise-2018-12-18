@@ -150,19 +150,20 @@ variable "db_pass" {
 }
 
 data "template_file" "init" {
-  template = "${file("${path.module}/nginx.yml.tpl")}"
+  //template = "${file("${path.module}/nginx.yml.tpl")}"
 
   //uncomment serviceapi cloud-init once db instantiated
-  //template = "${file("${path.module}/init.yml.tpl")}"
+  template = "${file("${path.module}/init.yml.tpl")}"
 
   //uncomment db module address output once db instantiated
   vars {
-    //postgres_address = "${module.db.this_db_instance_address}"  //postgres_password = "${var.db_pass}"
+    postgres_address = "${module.db.this_db_instance_address}"
+    postgres_password = "${var.db_pass}"
   }
 }
 
 resource "aws_instance" "app" {
-  count         = "2"
+  count         = "1"
   instance_type = "t3.micro"
 
   ami = "${data.aws_ami.amazon_ecs_linux.id}"
@@ -316,6 +317,7 @@ resource "aws_elb" "web" {
 
 // Attach Pet EC2 instance to ELB using an attachment resource to avoid
 // removal of ASG's instances when running terraform apply for 2nd/3rd/etc set of changes
+/*
 resource "aws_elb_attachment" "app_instance" {
   count = "${length(aws_instance.app.*.id)}"
 
@@ -323,6 +325,7 @@ resource "aws_elb_attachment" "app_instance" {
   instance = "${element(aws_instance.app.*.id, count.index)}"
 
 }
+*/
 
 // Create an ELB - END
 
