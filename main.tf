@@ -90,25 +90,6 @@ resource "aws_security_group" "outbound" {
 
 // Create an EC2 instance - START
 
-data "aws_ami" "amazon_ecs_linux" {
-  most_recent = true
-
-  filter {
-    name = "name"
-
-    values = [
-      "amzn-ami-*.i-amazon-ecs-optimized",
-    ]
-  }
-
-  filter {
-    name = "owner-alias"
-
-    values = [
-      "amazon",
-    ]
-  }
-}
 
 locals {
   exercise_app_name = "exercise-${var.name}"
@@ -136,7 +117,7 @@ resource "aws_instance" "app" {
   count         = "1"
   instance_type = "t3.micro"
 
-  ami = "${data.aws_ami.amazon_ecs_linux.id}"
+  ami = "${var.app_instance_ami}"
 
   user_data = "${data.template_file.init.rendered}"
 
@@ -182,7 +163,7 @@ module "asg" {
 
   instance_type = "t3.micro"
 
-  image_id = "${data.aws_ami.amazon_ecs_linux.id}"
+  image_id = "${var.app_instance_ami}"
 
   user_data = "${data.template_file.init.rendered}"
   key_name  = "${aws_key_pair.exercise.id}"

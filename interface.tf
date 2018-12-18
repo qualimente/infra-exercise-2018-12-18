@@ -28,6 +28,9 @@ variable "db_pass" {
   description = "Password to use for DB"
 }
 
+variable "app_instance_ami" {
+  description = "AMI to use for the application EC2 instances"
+}
 
 // Output Location of ELB and App Server - START
 

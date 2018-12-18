@@ -11,17 +11,41 @@ locals {
   name = "${var.name}-${random_id.testing_suffix.hex}"
 }
 
+data "aws_ami" "amazon_ecs_linux" {
+  most_recent = true
+
+  filter {
+    name = "name"
+
+    values = [
+      "amzn-ami-*.i-amazon-ecs-optimized",
+    ]
+  }
+
+  filter {
+    name = "owner-alias"
+
+    values = [
+      "amazon",
+    ]
+  }
+}
+
+
 module "it_minimal" {
   //instantiate multi_tier_app module for a minimal integration test
   source = "../../../"
 
   name   = "${local.name}"
   vpc_id = "vpc-58a29221"
+
+  app_instance_ami = "${data.aws_ami.amazon_ecs_linux.id}"
 }
 
 variable "name" {
   type = "string"
 }
+
 
 output "testing_suffix_hex" {
   value     = "${random_id.testing_suffix.hex}"
