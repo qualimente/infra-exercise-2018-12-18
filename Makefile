@@ -85,7 +85,7 @@ kitchen:
 	@$(call kitchen,$(COMMAND))
 
 docs:
-	@$(call terraform-docs,markdown main.tf db.tf > interface.md)
+	@$(call terraform-docs,markdown interface.tf main.tf db.tf > interface.md)
 
 all: deps init format converge verify docs
 
