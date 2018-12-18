@@ -157,7 +157,7 @@ data "template_file" "init" {
 
   //uncomment db module address output once db instantiated
   vars {
-    postgres_address = "${module.db.this_db_instance_address}"
+    postgres_address  = "${module.db.this_db_instance_address}"
     postgres_password = "${var.db_pass}"
   }
 }
@@ -217,20 +217,19 @@ module "asg" {
   user_data = "${data.template_file.init.rendered}"
   key_name  = "${aws_key_pair.exercise.id}"
 
+  #key_name  = "exercise-skuenzli"
+
   # Launch configuration
   #
   # launch_configuration = "my-existing-launch-configuration" # Use the existing launch configuration
   # create_lc = false # disables creation of launch configuration
   lc_name = "${local.exercise_app_name}"
-
   security_groups = [
     "${aws_security_group.public_ssh.id}",
     "${aws_security_group.internal_web.id}",
     "${aws_security_group.outbound.id}",
   ]
-
   load_balancers = ["${aws_elb.web.id}"]
-
   root_block_device = [
     {
       volume_size           = "20"
@@ -238,7 +237,6 @@ module "asg" {
       delete_on_termination = true
     },
   ]
-
   # Auto scaling group
   asg_name                  = "${local.exercise_app_name}"
   vpc_zone_identifier       = ["${data.aws_subnet_ids.default_vpc.ids}"]
@@ -252,24 +250,24 @@ module "asg" {
   //Your instance may be terminated, but it'll be cheaper until it does
   //spot_price = "0.0104"
 
-  tags_as_map = "${local.asg_instance_tags}"
-//  tags = [
-//    {
-//      key                 = "Environment"
-//      value               = "training"
-//      propagate_at_launch = true
-//    },
-//    {
-//      key                 = "Owner"
-//      value               = "${var.name}"
-//      propagate_at_launch = true
-//    },
-//    {
-//      key                 = "WorkloadType"
-//      value               = "CuteButNamelessCow"
-//      propagate_at_launch = true
-//    },
-//  ]
+  //tags_as_map = "${local.asg_instance_tags}"
+  tags = [
+    {
+      key                 = "Environment"
+      value               = "training"
+      propagate_at_launch = true
+    },
+    {
+      key                 = "Owner"
+      value               = "${var.name}"
+      propagate_at_launch = true
+    },
+    {
+      key                 = "WorkloadType"
+      value               = "CuteButNamelessCow"
+      propagate_at_launch = true
+    },
+  ]
 
   // Equivalent to:
   //
@@ -332,7 +330,7 @@ resource "aws_elb_attachment" "app_instance" {
 // Output Location of ELB and App Server - START
 
 output "lb.web.dns_name" {
-value = "${aws_elb.web.dns_name}"
+  value = "${aws_elb.web.dns_name}"
 }
 
 output "app.web.dns_name" {
@@ -340,11 +338,12 @@ output "app.web.dns_name" {
 }
 
 output "app.asg.name" {
-value = "${module.asg.this_autoscaling_group_name}"
+  value = "${module.asg.this_autoscaling_group_name}"
 }
 
 output "app.asg.launch_configuration_name" {
-value = "${module.asg.this_launch_configuration_name}"
+  value = "${module.asg.this_launch_configuration_name}"
 }
 
 // Output Location of ELB and App Server - END
+

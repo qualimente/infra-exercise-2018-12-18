@@ -1,14 +1,14 @@
 // Add a Postgres DB using RDS - START
 
 resource "aws_security_group" "db" {
-  name = "db-${var.name}"
+  name   = "db-${var.name}"
   vpc_id = "${var.vpc_id}"
 
   ingress {
-    from_port = "5432"
-    to_port = "5432"
-    protocol = "tcp"
-    security_groups = [ "${aws_security_group.internal_web.id}"]
+    from_port       = "5432"
+    to_port         = "5432"
+    protocol        = "tcp"
+    security_groups = ["${aws_security_group.internal_web.id}"]
   }
 }
 
@@ -16,7 +16,6 @@ module "db" {
   #source = "git@github.com:terraform-aws-modules/terraform-aws-rds.git?ref=v1.4.0"
   source  = "terraform-aws-modules/rds/aws"
   version = "1.4.0"
-
 
   identifier = "${local.exercise_app_name}"
 
@@ -66,3 +65,4 @@ output "db.web.endpoint" {
 }
 
 // Add a Postgres DB using RDS - END
+
